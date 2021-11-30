@@ -21,7 +21,7 @@ setup(name='nnunet',
             "SimpleITK",
             "pandas",
             "requests",
-            "nibabel", 'tifffile'
+            "nibabel", 'tifffile','axial_attention'
       ],
       entry_points={
           'console_scripts': [
