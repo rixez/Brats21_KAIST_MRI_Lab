@@ -46,7 +46,14 @@ def evaluate_case(file_pred: str, file_gt: str, regions):
         mask_pred = create_region_from_mask(image_pred, r)
         mask_gt = create_region_from_mask(image_gt, r)
         dc = np.nan if np.sum(mask_gt) == 0 and np.sum(mask_pred) == 0 else metric.dc(mask_pred, mask_gt)
-        results.append(dc)
+
+        if np.sum(mask_gt) == 0 and np.sum(mask_pred) == 0:
+            hd95 = 0
+        elif (np.sum(mask_gt) == 0) != (np.sum(mask_pred) == 0):
+            hd95 = 373.13
+        else:
+            hd95 = metric.hd95(mask_pred, mask_gt)
+        results.append([dc,hd95])
     return results
 
 
@@ -73,27 +80,38 @@ def evaluate_regions(folder_predicted: str, folder_gt: str, regions: dict, proce
     p.join()
 
     all_results = {r: [] for r in region_names}
+    all_results_hd = {r: [] for r in region_names}
     with open(join(folder_predicted, 'summary.csv'), 'w') as f:
         f.write("casename")
         for r in region_names:
             f.write(",%s" % r)
+        for r in region_names:
+            f.write(",%s_HD95" % r)
         f.write("\n")
         for i in range(len(files_in_pred)):
             f.write(files_in_pred[i][:-7])
             result_here = res[i]
             for k, r in enumerate(region_names):
-                dc = result_here[k]
+                dc, hd95 = result_here[k]
                 f.write(",%02.4f" % dc)
                 all_results[r].append(dc)
+            for k, r in enumerate(region_names):
+                dc, hd95 = result_here[k]
+                f.write(",%02.4f" % hd95)
+                all_results_hd[r].append(hd95)
             f.write("\n")
 
         f.write('mean')
         for r in region_names:
             f.write(",%02.4f" % np.nanmean(all_results[r]))
+        for r in region_names:
+            f.write(",%02.4f" % np.nanmean(all_results_hd[r]))
         f.write("\n")
         f.write('median')
         for r in region_names:
             f.write(",%02.4f" % np.nanmedian(all_results[r]))
+        for r in region_names:
+            f.write(",%02.4f" % np.nanmedian(all_results_hd[r]))
         f.write("\n")
 
         f.write('mean (nan is 1)')
