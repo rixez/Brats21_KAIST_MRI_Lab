@@ -31,3 +31,20 @@ nnUNet_train 3d_fullres nnUNetTrainerV2BraTSRegions_DA4_BN_BD <TASK_ID> <FOLD> -
 nnUNet_train 3d_fullres nnUNetTrainerV2BraTSRegions_DA4_BN_BD_largeUnet_Groupnorm <TASK_ID> <FOLD> --npz # BL + L + GN config
 ```
 
+## Citation
+If you found this work useful for your research, please consider citing:
+```bibtex
+@InProceedings{10.1007/978-3-031-09002-8_16,
+title="Extending nn-UNet for Brain Tumor Segmentation",
+author={Luu, Huan Minh and Park, Sung-Hong},
+booktitle="Brainlesion: Glioma, Multiple Sclerosis, Stroke and Traumatic Brain Injuries",
+year="2022",
+publisher="Springer International Publishing",
+address="Cham",
+pages="173--186",
+}
+```
+
+## Acknowledgement
+This repo borrowed heavily from [nnUNet](https://github.com/MIC-DKFZ/nnUNet) library and [axial attention](https://github.com/lucidrains/axial-attention)
+
