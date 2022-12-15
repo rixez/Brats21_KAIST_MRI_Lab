@@ -18,7 +18,7 @@ imageio==2.9.0
 ipython
 ipython-genutils==0.2.0
 jedi
-joblib==1.0.1
+joblib==1.2.0
 kiwisolver==1.3.1
 linecache2==1.0.0
 matplotlib
