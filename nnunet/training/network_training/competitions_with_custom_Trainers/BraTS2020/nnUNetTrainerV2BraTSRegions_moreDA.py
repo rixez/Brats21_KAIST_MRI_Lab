@@ -20,7 +20,7 @@ from nnunet.training.data_augmentation.data_augmentation_insaneDA2 import get_in
 from torch import nn
 
 from nnunet.evaluation.region_based_evaluation import evaluate_regions, get_brats_regions
-from nnunet.network_architecture.generic_UNet import Generic_UNet
+from nnunet.network_architecture.generic_UNet import Generic_UNet, Axial_UNet
 from nnunet.network_architecture.initialization import InitWeights_He
 from nnunet.network_architecture.neural_network import SegmentationNetwork
 from nnunet.training.data_augmentation.default_data_augmentation import default_3D_augmentation_params, \
@@ -31,6 +31,7 @@ from nnunet.training.loss_functions.dice_loss import DC_and_BCE_loss, get_tp_fp_
 from nnunet.training.network_training.nnUNetTrainerV2 import nnUNetTrainerV2
 from nnunet.training.network_training.nnUNet_variants.data_augmentation.nnUNetTrainerV2_DA3 import \
     nnUNetTrainerV2_DA3_BN
+from nnunet.network_architecture.swinunetr import nnUNet_SwinUNETR
 
 
 class nnUNetTrainerV2BraTSRegions_DA3_BN(nnUNetTrainerV2_DA3_BN):
@@ -249,7 +250,7 @@ class nnUNetTrainerV2BraTSRegions_DA4_BN(nnUNetTrainerV2BraTSRegions_DA3_BN):
         self.data_aug_params["p_independent_scale_per_axis"] = 0.3
 
         self.data_aug_params["do_elastic"] = True
-        self.data_aug_params["p_eldef"] = 0.2
+        self.data_aug_params["p_eldef"] = 0.3 # LMH 0.2 -> 0.3 according to paper
         self.data_aug_params["eldef_deformation_scale"] = (0, 0.25)
 
         self.data_aug_params["do_additive_brightness"] = True
@@ -269,3 +270,318 @@ class nnUNetTrainerV2BraTSRegions_DA4_BN_BD(nnUNetTrainerV2BraTSRegions_DA4_BN):
         super().__init__(plans_file, fold, output_folder, dataset_directory, batch_dice, stage, unpack_data,
                          deterministic, fp16)
         self.loss = DC_and_BCE_loss({}, {'batch_dice': True, 'do_bg': True, 'smooth': 0})
+
+class nnUNetTrainerV2BraTSRegions_DA4_BN_BD_largeUnet(nnUNetTrainerV2BraTSRegions_DA4_BN_BD): # BL + L
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.BatchNorm3d
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Generic_UNet(self.num_input_channels, self.base_num_features, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 512, encoder_scale=2)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_BN_BD_Groupnorm(nnUNetTrainerV2BraTSRegions_DA4_BN_BD): # BL + GN
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.GroupNorm
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'num_groups':32,'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Generic_UNet(self.num_input_channels, self.base_num_features, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 320, encoder_scale=1)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_BN_BD_largeUnet_Groupnorm(nnUNetTrainerV2BraTSRegions_DA4_BN_BD): #BL + L + GN
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.GroupNorm
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'num_groups':32,'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Generic_UNet(self.num_input_channels, self.base_num_features, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 512, encoder_scale=2)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_BN_BD_normalUnet_axialattention(nnUNetTrainerV2BraTSRegions_DA4_BN_BD): # BL + AA
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.BatchNorm3d
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Generic_UNet(self.num_input_channels, self.base_num_features, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 320, encoder_scale=1,
+                                    axial_attention=True, heads=2, dim_heads=8,volume_shape=(128,128,128),no_attention=[4])
+        print(self.network)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_BN_no_dice(nnUNetTrainerV2BraTSRegions_DA4_BN_BD):
+    def __init__(self, plans_file, fold, output_folder=None, dataset_directory=None, batch_dice=True, stage=None,
+                 unpack_data=True, deterministic=True, fp16=False):
+        super().__init__(plans_file, fold, output_folder, dataset_directory, batch_dice, stage, unpack_data,
+                         deterministic, fp16)
+        self.loss = nn.BCEWithLogitsLoss()
+
+class nnUNetTrainerV2BraTSRegions_DA4_BN_BD_axialattention_unet(nnUNetTrainerV2BraTSRegions_DA4_BN_BD):
+    # axial attention in both encoder and decoder
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.BatchNorm3d
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Axial_UNet(self.num_input_channels, self.base_num_features, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 320, encoder_scale=1,
+                                    axial_attention=True, heads=1, dim_heads=4,volume_shape=(128,128,128),no_attention=[0], axial_bn=True, sum_axial_out=True)
+        print(self.network)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_BN_BD_res_axial_attention_unet(nnUNetTrainerV2BraTSRegions_DA4_BN_BD):
+    # axial attention in both encoder and decoder
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.BatchNorm3d
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Axial_UNet(self.num_input_channels, self.base_num_features, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 320, encoder_scale=1,
+                                    axial_attention=True, heads=1, dim_heads=4,volume_shape=(128,128,128),no_attention=[0], axial_bn=True, sum_axial_out=True, residual_attention=True)
+        print(self.network)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_GN_BD_XL_Unet(nnUNetTrainerV2BraTSRegions_DA4_BN_BD):
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.GroupNorm
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'num_groups':32, 'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Generic_UNet(self.num_input_channels, self.base_num_features*2, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 1024, encoder_scale=1)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_GN_BD_XL_dropout50_Unet(nnUNetTrainerV2BraTSRegions_DA4_BN_BD):
+    ## not good, too much dropout
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.GroupNorm
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'num_groups':16, 'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0.5, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Generic_UNet(self.num_input_channels, self.base_num_features*2, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 1024, encoder_scale=1)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_GN_BD_XL_dropout50_only_last_level_Unet(nnUNetTrainerV2BraTSRegions_DA4_BN_BD):
+    ## not good, too much dropout
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.GroupNorm
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'num_groups':16, 'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0.5, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Generic_UNet(self.num_input_channels, self.base_num_features*2, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 1024, encoder_scale=1, dropout_level=[7])
+        print(self.network)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_DA4_GN_BD_XL_dropout50_two_last_levels_Unet(nnUNetTrainerV2BraTSRegions_DA4_BN_BD):
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.GroupNorm
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+
+        norm_op_kwargs = {'num_groups':16, 'eps': 1e-5, 'affine': True}
+        dropout_op_kwargs = {'p': 0.5, 'inplace': True}
+        net_nonlin = nn.LeakyReLU
+        net_nonlin_kwargs = {'negative_slope': 1e-2, 'inplace': True}
+        self.network = Generic_UNet(self.num_input_channels, self.base_num_features*2, self.num_classes,
+                                    len(self.net_num_pool_op_kernel_sizes),
+                                    self.conv_per_stage, 2, conv_op, norm_op, norm_op_kwargs, dropout_op,
+                                    dropout_op_kwargs,
+                                    net_nonlin, net_nonlin_kwargs, True, False, lambda x: x, InitWeights_He(1e-2),
+                                    self.net_num_pool_op_kernel_sizes, self.net_conv_kernel_sizes, False, True, True, 1024, encoder_scale=1, dropout_level=[4])
+        print(self.network)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+
+class nnUNetTrainerV2BraTSRegions_SwinUNETR(nnUNetTrainerV2BraTSRegions_DA4_BN_BD):
+    def initialize_network(self):
+        """inference_apply_nonlin to sigmoid + larger unet"""
+        if self.threeD:
+            conv_op = nn.Conv3d
+            dropout_op = nn.Dropout3d
+            norm_op = nn.GroupNorm
+
+        else:
+            conv_op = nn.Conv2d
+            dropout_op = nn.Dropout2d
+            norm_op = nn.BatchNorm2d
+        
+        self.network = nnUNet_SwinUNETR(img_size=(128, 128, 128),
+                                        in_channels=self.num_input_channels,
+                                        out_channels=self.num_classes,
+                                        feature_size=12)
+        self.network.do_ds = False
+        
+        print(self.network)
+        if torch.cuda.is_available():
+            self.network.cuda()
+        self.network.inference_apply_nonlin = nn.Sigmoid()
+        
+    
