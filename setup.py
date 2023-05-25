@@ -15,13 +15,13 @@ setup(name='nnunet',
             "scikit-image>=0.14",
             "medpy",
             "scipy",
-            "batchgenerators>=0.21",
+            "batchgenerators==0.21",
             "numpy",
             "sklearn",
             "SimpleITK",
             "pandas",
             "requests",
-            "nibabel", 'tifffile'
+            "nibabel", 'tifffile','axial_attention'
       ],
       entry_points={
           'console_scripts': [
