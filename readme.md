@@ -15,7 +15,7 @@ You can run the inference with the docker image that we submitted to the competi
 The docker container was built and verified with Pytorch 1.9.1, Cuda 11.4 and a RTX3090. It takes about 4GB of GPU memory for inference with the docker container. The provided docker image might not work with different hardwares or cuda version. In that case, you can try running the models from the command line.
 
 ## Inference with command line
-If you want to run the model without docker, first, download the models from [here](https://drive.google.com/file/d/1yWgD1JlEocXRWVMAYOa7YKtQLEhDjhIx/view?usp=sharing). Extract the files and put the models in the `RESULTS_FOLDER` that you set up with nnUNet.
+If you want to run the model without docker, first, download the models from [here](https://drive.google.com/file/d/1HZmWG4j2zQg0vVwBsTrpnuLOmtKCpix2/view?usp=sharing). Extract the files and put the models in the `RESULTS_FOLDER` that you set up with nnUNet.
 Then run the following commands:
 ```
 nnUNet_predict -i <input_folder> -o <output_folder1> -t <TASK_ID> -m 3d_fullres -tr nnUNetTrainerV2BraTSRegions_DA4_BN_BD --save_npz
